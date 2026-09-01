@@ -232,11 +232,13 @@ async function seed() {
       active: true,
     },
   ]);
-  console.log("Seeded: admin@finflow.test / Admin@123");
+  // console.log("Seeded: admin@finflow.test / Admin@123");
 }
 mongoose
-  .connect(process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/finflow")
+  .connect(process.env.MONGODB_URI)
   .then(async () => {
+    console.log(process.env.MONGODB_URI);
+
     await seed();
     app.listen(process.env.PORT || 5000, () =>
       console.log("API running on port 5000"),
