@@ -12,7 +12,7 @@ import crypto from "crypto";
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const roles = ["admin", "operator", "accounts"];
-app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:5173" }));
+app.use(cors({ origin: process.env.CLIENT_URL }));
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -158,10 +158,6 @@ app.get("/api/dashboard", auth(), async (req, res) => {
   });
 });
 
-app.get("/api/test", async (req, res) =>
-  res.json({ message: "ok", server: "Vercel" }),
-);
-
 app.get("/api/parties", auth(), async (req, res) =>
   res.json(await Party.find().sort("-createdAt")),
 );
@@ -239,14 +235,17 @@ async function seed() {
   ]);
   // console.log("Seeded: admin@finflow.test / Admin@123");
 }
+
+app.get("/api/test", async (req, res) =>
+  res.json({ message: "ok", server: "Vercel" }),
+);
+
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(async () => {
-    console.log(process.env.MONGODB_URI);
-
+    console.log("MongoDB connected");
     await seed();
-    app.listen(process.env.PORT || 5000, () =>
-      console.log("API running on port 5000"),
-    );
   })
   .catch((e) => console.error("MongoDB connection failed:", e.message));
+
+export default app;
