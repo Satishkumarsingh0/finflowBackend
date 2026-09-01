@@ -157,6 +157,11 @@ app.get("/api/dashboard", auth(), async (req, res) => {
     activeParties: await Party.countDocuments({ active: true }),
   });
 });
+
+app.get("/api/test", async (req, res) =>
+  res.json({ message: "ok", server: "Vercel" }),
+);
+
 app.get("/api/parties", auth(), async (req, res) =>
   res.json(await Party.find().sort("-createdAt")),
 );
