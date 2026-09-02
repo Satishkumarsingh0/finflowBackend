@@ -3,8 +3,15 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "nodemon index.js",
-    "start": "node index.js"
+    "dev": "npm run dev:local",
+    "dev:local": "cross-env NODE_ENV=local nodemon index.js",
+    "dev:development": "cross-env NODE_ENV=development nodemon index.js",
+    "dev:test": "cross-env NODE_ENV=test nodemon index.js",
+    "start": "npm run start:production",
+    "start:local": "cross-env NODE_ENV=local node index.js",
+    "start:development": "cross-env NODE_ENV=development node index.js",
+    "start:test": "cross-env NODE_ENV=test node index.js",
+    "start:production": "cross-env NODE_ENV=production node index.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -19,6 +26,7 @@
     "nodemailer": "^6.9.16"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "nodemon": "^3.1.9"
   }
 }

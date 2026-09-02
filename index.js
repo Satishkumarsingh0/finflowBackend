@@ -1,4 +1,5 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+import path from "path";
 import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
@@ -9,11 +10,18 @@ import { v2 as cloudinary } from "cloudinary";
 import { CloudinaryStorage } from "multer-storage-cloudinary";
 import crypto from "crypto";
 
+const environment = process.env.NODE_ENV || "local";
+dotenv.config({ path: path.resolve(process.cwd(), `.env.${environment}`) });
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+
 const app = express();
 
 const roles = ["admin", "operator", "accounts"];
 
-app.use(cors({ origin: process.env.CLIENT_URL }));
+const allowedOrigins = (process.env.CLIENT_URL)
+  .split(",")
+  .map((origin) => origin.trim());
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
 app.get("/", (req, res) => {
@@ -31,24 +39,37 @@ cloudinary.config({
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
-    folder: "finflow",
+    folder: "finflow/transactions",
     resource_type: "auto",
-    allowed_formats: ["jpg", "jpeg", "png", "pdf", "doc", "docx"],
   },
 });
 
+const isAcceptedAttachment = (file) =>
+  file.mimetype === "application/pdf" || file.mimetype.startsWith("image/");
 const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, callback) => {
+    if (isAcceptedAttachment(file)) return callback(null, true);
+    callback(new Error("Only image files and PDF documents are allowed."));
+  },
 });
+const uploadAttachment = (req, res, next) =>
+  upload.single("attachment")(req, res, (error) => {
+    if (!error) return next();
+    const message = error.code === "LIMIT_FILE_SIZE"
+      ? "Attachment must be 5 MB or smaller."
+      : error.message || "Could not process the attachment.";
+    return res.status(400).json({ message });
+  });
 
 /* ---------------- SCHEMAS ---------------- */
 
 const userSchema = new mongoose.Schema(
   {
-    name: String,
-    email: { type: String, unique: true },
-    password: String,
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    password: { type: String, required: true },
     role: { type: String, enum: roles, default: "operator" },
     resetToken: String,
     resetExpires: Date,
@@ -58,7 +79,7 @@ const userSchema = new mongoose.Schema(
 
 const partySchema = new mongoose.Schema(
   {
-    name: String,
+    name: { type: String, required: true, trim: true },
     type: {
       type: String,
       enum: ["Customer", "Vendor", "Other"],
@@ -79,7 +100,7 @@ const transactionSchema = new mongoose.Schema(
       type: String,
       enum: ["received", "transferred"],
     },
-    amount: Number,
+    amount: { type: Number, required: true, min: 0 },
     currency: { type: String, default: "INR" },
     mode: {
       type: String,
@@ -89,8 +110,9 @@ const transactionSchema = new mongoose.Schema(
     reference: String,
     notes: String,
 
-    // Cloudinary URL
     attachment: String,
+    attachmentPublicId: String,
+    attachmentOriginalName: String,
 
     transactionDate: { type: Date, default: Date.now },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -138,7 +160,7 @@ const auth =
 /* ---------------- AUTH ROUTES ---------------- */
 
 app.post("/api/auth/login", async (req, res) => {
-  const user = await User.findOne({ email: req.body.email });
+  const user = await User.findOne({ email: req.body.email?.toLowerCase() });
 
   if (!user || !(await bcrypt.compare(req.body.password, user.password))) {
     return res.status(401).json({ message: "Invalid credentials" });
@@ -227,13 +249,37 @@ app.get("/api/parties", auth(), async (req, res) => {
 });
 
 app.post("/api/parties", auth("admin", "operator"), async (req, res) => {
-  res.status(201).json(await Party.create(req.body));
+  try {
+    res.status(201).json(await Party.create(req.body));
+  } catch (error) {
+    res.status(400).json({ message: error.message || "Could not create party." });
+  }
 });
 
 app.put("/api/parties/:id", auth("admin", "operator"), async (req, res) => {
-  res.json(
-    await Party.findByIdAndUpdate(req.params.id, req.body, { new: true }),
+  try {
+    const party = await Party.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true,
+    });
+    if (!party) return res.status(404).json({ message: "Party not found." });
+    res.json(party);
+  } catch (error) {
+    res.status(400).json({ message: error.message || "Could not update party." });
+  }
+});
+
+app.patch("/api/parties/:id/status", auth("admin", "operator"), async (req, res) => {
+  if (typeof req.body.active !== "boolean") {
+    return res.status(400).json({ message: "Active status must be true or false." });
+  }
+  const party = await Party.findByIdAndUpdate(
+    req.params.id,
+    { active: req.body.active },
+    { new: true },
   );
+  if (!party) return res.status(404).json({ message: "Party not found." });
+  res.json(party);
 });
 
 /* ---------------- TRANSACTIONS ---------------- */
@@ -250,18 +296,27 @@ app.get("/api/transactions", auth(), async (req, res) => {
 app.post(
   "/api/transactions",
   auth("admin", "operator", "accounts"),
-  upload.single("attachment"),
+  uploadAttachment,
   async (req, res) => {
-    const transaction = await Transaction.create({
-      ...req.body,
-      amount: Number(req.body.amount),
-      createdBy: req.user._id,
-
-      // Cloudinary file URL
-      attachment: req.file ? req.file.path : null,
-    });
-
-    res.status(201).json(transaction);
+    try {
+      if (!Number.isFinite(Number(req.body.amount)) || Number(req.body.amount) <= 0) {
+        return res.status(400).json({ message: "Amount must be greater than zero." });
+      }
+      const transaction = await Transaction.create({
+        ...req.body,
+        amount: Number(req.body.amount),
+        createdBy: req.user._id,
+        attachment: req.file?.path || null,
+        attachmentPublicId: req.file?.filename || null,
+        attachmentOriginalName: req.file?.originalname || null,
+      });
+      res.status(201).json(transaction);
+    } catch (error) {
+      console.error("Transaction attachment upload failed:", error.message);
+      res.status(502).json({
+        message: "Could not upload the attachment. Please try again.",
+      });
+    }
   },
 );
 
@@ -272,9 +327,24 @@ app.get("/api/users", auth("admin"), async (req, res) => {
 });
 
 app.post("/api/users", auth("admin"), async (req, res) => {
-  const password = await bcrypt.hash(req.body.password, 12);
-
-  res.status(201).json(await User.create({ ...req.body, password }));
+  try {
+    if (!req.body.password || req.body.password.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters." });
+    }
+    const password = await bcrypt.hash(req.body.password, 12);
+    const user = await User.create({ ...req.body, password });
+    res.status(201).json({
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    });
+  } catch (error) {
+    const message = error.code === 11000
+      ? "A user with this email already exists."
+      : error.message || "Could not create user.";
+    res.status(400).json({ message });
+  }
 });
 
 /* ---------------- SEED ---------------- */
@@ -292,12 +362,21 @@ async function seed() {
 
 /* ---------------- DB ---------------- */
 
-mongoose
-  .connect(process.env.MONGODB_URI)
-  .then(async () => {
+async function startServer() {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
     console.log("MongoDB connected");
     await seed();
-  })
-  .catch((err) => console.error(err));
+    if (!process.env.VERCEL) {
+      const port = Number(process.env.PORT || 5000);
+      app.listen(port, () => console.log(`API running on http://localhost:${port} (${environment})`));
+    }
+  } catch (error) {
+    console.error("MongoDB connection failed:", error.message);
+    process.exitCode = 1;
+  }
+}
+
+startServer();
 
 export default app;

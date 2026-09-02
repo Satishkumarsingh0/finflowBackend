@@ -3,5 +3,5 @@ dist
 .env
 *.log
 *.env.local
-*.env*
-
+.env.*
+*.env
