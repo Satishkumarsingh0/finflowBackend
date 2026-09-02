@@ -17,24 +17,21 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 const app = express();
 
 const roles = ["admin", "operator", "accounts"];
+
 const allowedOrigins = (process.env.CLIENT_URL || "")
   .split(",")
   .map((origin) => origin.trim().replace(/\/$/, ""))
   .filter(Boolean);
 
-const isAllowedOrigin = (origin) =>
-  !origin ||
-  allowedOrigins.includes(origin) ||
-  /^https:\/\/finflow-[a-z0-9-]+\.vercel\.app$/.test(origin) ||
-  /^http:\/\/localhost:(5173|5174)$/.test(origin);
-
 const corsOptions = {
-  origin: (origin, callback) => {
-    if (isAllowedOrigin(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error(`CORS origin not allowed: ${origin}`));
-    }
+  origin(origin, callback) {
+    const allowed =
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      /^https:\/\/finflow-[a-z0-9-]+\.vercel\.app$/.test(origin) ||
+      /^http:\/\/localhost:(5173|5174)$/.test(origin);
+
+    callback(null, allowed);
   },
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
