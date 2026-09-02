@@ -19,31 +19,28 @@ const app = express();
 const roles = ["admin", "operator", "accounts"];
 const allowedOrigins = (process.env.CLIENT_URL || "")
   .split(",")
-  .map((origin) => origin.trim())
+  .map((origin) => origin.trim().replace(/\/$/, ""))
   .filter(Boolean);
 
-const allowedOriginPatterns = [
-  /^https:\/\/finflow-[a-z0-9]+-satishsingh8757-7035\.vercel\.app$/,
-  /^https:\/\/finflow-xi-lovat\.vercel\.app$/,
-  /^http:\/\/localhost:(5173|5174)$/,
-];
+const isAllowedOrigin = (origin) =>
+  !origin ||
+  allowedOrigins.includes(origin) ||
+  /^https:\/\/finflow-[a-z0-9-]+\.vercel\.app$/.test(origin) ||
+  /^http:\/\/localhost:(5173|5174)$/.test(origin);
 
 const corsOptions = {
   origin: (origin, callback) => {
-    if (
-      !origin ||
-      allowedOrigins.includes(origin) ||
-      allowedOriginPatterns.some((pattern) => pattern.test(origin))
-    ) {
-      return callback(null, true);
+    if (isAllowedOrigin(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS origin not allowed: ${origin}`));
     }
-
-    return callback(new Error(`CORS origin not allowed: ${origin}`));
   },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
 
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
 
 app.use(express.json());
 
