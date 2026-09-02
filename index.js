@@ -17,11 +17,34 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 const app = express();
 
 const roles = ["admin", "operator", "accounts"];
-
-const allowedOrigins = (process.env.CLIENT_URL)
+const allowedOrigins = (process.env.CLIENT_URL || "")
   .split(",")
-  .map((origin) => origin.trim());
-app.use(cors({ origin: allowedOrigins }));
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const allowedOriginPatterns = [
+  /^https:\/\/finflow-[a-z0-9]+-satishsingh8757-7035\.vercel\.app$/,
+  /^https:\/\/finflow-xi-lovat\.vercel\.app$/,
+  /^http:\/\/localhost:(5173|5174)$/,
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      allowedOriginPatterns.some((pattern) => pattern.test(origin))
+    ) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`CORS origin not allowed: ${origin}`));
+  },
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+
 app.use(express.json());
 
 app.get("/", (req, res) => {
