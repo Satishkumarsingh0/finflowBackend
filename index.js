@@ -71,13 +71,16 @@ const connectDatabase = async () => {
   }
 
   if (!databasePromise) {
-    databasePromise = mongoose
-      .connect(process.env.MONGODB_URI, {
-        serverSelectionTimeoutMS: 10000,
-        connectTimeoutMS: 10000,
-        maxPoolSize: 10,
-      })
-      .catch((error) => {
+    databasePromise =mongoose.connect(process.env.MONGODB_URI, {
+  serverApi: {
+    version: "1",
+    strict: true,
+    deprecationErrors: true,
+  },
+  serverSelectionTimeoutMS: 10000,
+  connectTimeoutMS: 10000,
+  maxPoolSize: 10,
+}).catch((error) => {
         databasePromise = null;
         throw error;
       });
