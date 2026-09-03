@@ -32,19 +32,12 @@ const allowedOrigins = (process.env.CLIENT_URL || "")
 const isAllowedOrigin = (origin) => {
   if (!origin) return true;
 
-  if (allowedOrigins.includes(origin)) {
-    return true;
-  }
-
-  if (/^https:\/\/finflow-[a-z0-9-]+\.vercel\.app$/.test(origin)) {
-    return true;
-  }
-
-  if (/^http:\/\/localhost:(5173|5174)$/.test(origin)) {
-    return true;
-  }
-
-  return false;
+  return (
+    allowedOrigins.includes(origin) ||
+    /^https:\/\/finflow-[a-z0-9-]+\.vercel\.app$/.test(origin) ||
+    /^https:\/\/finflowstat\.netlify\.app$/.test(origin) ||
+    /^http:\/\/localhost:(5173|5174)$/.test(origin)
+  );
 };
 
 const corsOptions = {
